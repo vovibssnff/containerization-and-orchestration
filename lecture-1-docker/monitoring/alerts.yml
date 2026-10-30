@@ -1,0 +1,42 @@
+groups:
+  - name: lab1-container
+    rules:
+      - alert: ContainerMemoryNearLimit
+        expr: |
+          (
+            container_memory_working_set_bytes{id=~".*/lab1-monitor"}
+            /
+            container_spec_memory_limit_bytes{id=~".*/lab1-monitor"}
+          ) > 0.85
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: API memory is near its cgroup limit
+          description: Working-set memory has exceeded 85% of memory.max for one minute.
+
+      - alert: ContainerCPUThrottled
+        expr: |
+          (
+            rate(container_cpu_cfs_throttled_periods_total{id=~".*/lab1-monitor"}[1m])
+            /
+            clamp_min(
+              rate(container_cpu_cfs_periods_total{id=~".*/lab1-monitor"}[1m]),
+              0.001
+            )
+          ) > 0.25
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: API is frequently CPU-throttled
+          description: More than 25% of CPU scheduling periods have been throttled for one minute.
+
+      - alert: ContainerOOMKilled
+        expr: |
+          increase(container_oom_events_total{id=~".*/lab1-monitor"}[5m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: API exceeded its cgroup memory limit
+          description: The kernel OOM killer terminated a process in the API cgroup.

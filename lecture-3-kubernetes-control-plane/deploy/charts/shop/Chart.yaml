@@ -1,0 +1,6 @@
+apiVersion: v2
+name: shop
+description: api, worker, and a CloudNativePG postgres cluster
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

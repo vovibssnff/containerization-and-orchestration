@@ -1,0 +1,23 @@
+# Breaks require-labels only.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: no-labels
+  namespace: policy-demo
+spec:
+  containers:
+    - name: app
+      image: localhost:5001/shop-api:0.1.0
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi

@@ -1,0 +1,26 @@
+# Breaks trusted-image-registry only.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: untrusted-image
+  namespace: policy-demo
+  labels:
+    app: untrusted-image
+    app.kubernetes.io/part-of: shop
+spec:
+  containers:
+    - name: app
+      image: example.invalid/shop:1
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi

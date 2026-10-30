@@ -1,0 +1,58 @@
+api:
+  replicaCount: 3
+  image:
+    repository: localhost:5001/shop-api
+    tag: "0.1.2"
+    pullPolicy: IfNotPresent
+  # HEALTH_FAIL=true makes /health return 500, so a rollout stalls on readiness.
+  healthFail: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+worker:
+  replicaCount: 2
+  image:
+    repository: localhost:5001/shop-worker
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+service:
+  port: 8080
+
+# CloudNativePG fills this secret after the cluster is up.
+database:
+  secret: postgres-app
+  key: uri
+
+postgres:
+  instances: 1
+  image: ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie
+  storage: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+otel:
+  endpoint: http://jaeger.monitoring.svc.cluster.local:4318
+
+# Lecture thresholds: error ratio above 5% for five minutes, latency above 2s.
+alerts:
+  errorRatio: 0.05
+  latencySeconds: 2
+  for: 5m

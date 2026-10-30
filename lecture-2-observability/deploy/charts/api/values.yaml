@@ -1,0 +1,33 @@
+replicaCount: 2
+
+image:
+  repository: localhost:5001/api
+  tag: "0.1.1"
+  pullPolicy: IfNotPresent
+
+service:
+  name: api
+  port: 8080
+
+# Service DNS, so /load is balanced across replicas.
+selfURL: http://api.app.svc.cluster.local:8080
+
+# OTLP/HTTP. Empty disables export; spans are still created for logs.
+otel:
+  endpoint: http://jaeger.monitoring.svc.cluster.local:4318
+
+alerts:
+  # Lecture 2: page on "error rate > 5% for five minutes", not on a single blip.
+  errorRatio: 0.05
+  # Lecture 2 example of a symptom page is order latency above 2s.
+  # /slow sleeps 1–3s, so this fires only when the slow path is actually the norm.
+  latencySeconds: 2
+  for: 5m
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi

@@ -1,0 +1,26 @@
+# Breaks disallow-privileged only.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: privileged
+  namespace: policy-demo
+  labels:
+    app: privileged
+    app.kubernetes.io/part-of: shop
+spec:
+  containers:
+    - name: app
+      image: localhost:5001/shop-api:0.1.0
+      securityContext:
+        privileged: true
+        runAsNonRoot: true
+        runAsUser: 65532
+        capabilities:
+          drop: ["ALL"]
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi

@@ -1,0 +1,46 @@
+$ curl localhost:8080/health
+ok
+
+$ docker exec lab1-api sh
+OCI runtime exec failed: exec failed: unable to start container process: exec: "sh": executable file not found in $PATH
+
+$ echo 'ephemeral proof' >/tmp/lab1-proof.txt
+$ docker run -d --name ephemeral-a lab1-api:scratch
+7d5cec0d3d3c031199b221d7ce31cb7cd8f4bf006380ccc035f9f019c9a79474
+$ docker cp /tmp/lab1-proof.txt ephemeral-a:/proof.txt
+Successfully copied 16B (transferred 2.05kB) to ephemeral-a:/proof.txt
+$ docker cp ephemeral-a:/proof.txt /tmp/readback.txt
+Successfully copied 16B (transferred 2.05kB) to /tmp/readback.txt
+$ cat /tmp/readback.txt
+ephemeral proof
+
+$ docker rm -f ephemeral-a
+ephemeral-a
+$ docker run -d --name ephemeral-b lab1-api:scratch
+2aa9c492980bd08984ba6adbf33a6f0917e10e6e3cc73a9ef2e5106263293211
+$ docker cp ephemeral-b:/proof.txt /tmp/readback.txt
+Error response from daemon: Could not find the file /proof.txt in container ephemeral-b
+$ docker rm -f ephemeral-b
+ephemeral-b
+
+$ docker volume create lab1-data
+lab1-data
+$ docker run -d --name volume-a -v lab1-data:/data lab1-api:scratch
+64d15b9725dfedc1a288566234c83e9cb5a1ab111381106ccf6a8cd115ea942d
+$ docker cp /tmp/lab1-proof.txt volume-a:/data/proof.txt
+Successfully copied 16B (transferred 2.05kB) to volume-a:/data/proof.txt
+$ docker rm -f volume-a
+volume-a
+
+$ docker run -d --name volume-b -v lab1-data:/data lab1-api:scratch
+0cd6833071ac2ff5cf0b234b5700b34ccc270f3329c4e344fe723cdce00dd1c0
+$ docker cp volume-b:/data/proof.txt /tmp/persisted.txt
+Successfully copied 16B (transferred 2.05kB) to /tmp/persisted.txt
+$ cat /tmp/persisted.txt
+ephemeral proof
+
+$ docker rm -f volume-b
+volume-b
+$ docker volume rm lab1-data
+lab1-data
+$ rm -f /tmp/lab1-proof.txt /tmp/readback.txt /tmp/persisted.txt

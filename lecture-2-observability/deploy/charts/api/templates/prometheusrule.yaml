@@ -1,0 +1,46 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: api
+  labels:
+    app: api
+spec:
+  groups:
+    - name: api.red
+      rules:
+        - alert: ApiErrorRateHigh
+          expr: |
+            (
+              sum(rate(http_requests_total{namespace="app",job="api",code=~"5.."}[5m]))
+              /
+              sum(rate(http_requests_total{namespace="app",job="api",route!="/health"}[5m]))
+            ) > {{ .Values.alerts.errorRatio }}
+          for: {{ .Values.alerts.for }}
+          labels:
+            severity: critical
+          annotations:
+            summary: api is returning errors to users
+            description: More than {{ .Values.alerts.errorRatio }} of non-probe requests have been 5xx for {{ .Values.alerts.for }}. Check the /fail handler, the latest deploy, and the error logs for this service. Roll back if a release caused it.
+        - alert: ApiLatencyP95High
+          expr: |
+            histogram_quantile(
+              0.95,
+              sum by (le) (
+                rate(http_request_duration_seconds_bucket{namespace="app",job="api",route!="/health",code=~"2.."}[5m])
+              )
+            ) > {{ .Values.alerts.latencySeconds }}
+          for: {{ .Values.alerts.for }}
+          labels:
+            severity: critical
+          annotations:
+            summary: api p95 latency of successful requests is above {{ .Values.alerts.latencySeconds }}s
+            description: p95 of successful (2xx) non-probe requests is above {{ .Values.alerts.latencySeconds }}s for {{ .Values.alerts.for }}. Failed requests are a separate series, so a burst of fast 500s cannot hide a slow success. Open a slow trace and see which span owns the time.
+        - alert: ApiNoReadyPods
+          expr: |
+            (sum(kube_pod_status_ready{namespace="app",pod=~"api-.+",condition="true"}) or vector(0)) == 0
+          for: {{ .Values.alerts.for }}
+          labels:
+            severity: critical
+          annotations:
+            summary: api has no ready pods
+            description: No ready api pod for {{ .Values.alerts.for }}. Users cannot be served. Check image pull, readiness, and whether the Deployment was scaled to zero. A single pod down is a weaker page than this, because the Service still has another ready address.

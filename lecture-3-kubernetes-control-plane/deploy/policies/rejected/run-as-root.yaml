@@ -1,0 +1,26 @@
+# Breaks require-non-root only.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: run-as-root
+  namespace: policy-demo
+  labels:
+    app: run-as-root
+    app.kubernetes.io/part-of: shop
+spec:
+  containers:
+    - name: app
+      image: localhost:5001/shop-api:0.1.0
+      securityContext:
+        runAsNonRoot: false
+        runAsUser: 0
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi

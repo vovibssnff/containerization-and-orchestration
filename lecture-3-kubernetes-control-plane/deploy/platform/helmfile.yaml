@@ -1,0 +1,27 @@
+repositories:
+  - name: kyverno
+    url: https://kyverno.github.io/kyverno/
+  - name: cnpg
+    url: https://cloudnative-pg.github.io/charts
+
+releases:
+  - name: kyverno
+    namespace: kyverno
+    chart: kyverno/kyverno
+    version: 3.9.2
+    wait: true
+    timeout: 600
+    # Fresh install: nothing to migrate, and the hook image is pulled from ghcr
+    # which times out from inside kind.
+    values:
+      - crds:
+          migration:
+            enabled: false
+  - name: cnpg
+    namespace: cnpg-system
+    chart: cnpg/cloudnative-pg
+    version: 0.29.1
+    wait: true
+    timeout: 600
+    needs:
+      - kyverno/kyverno

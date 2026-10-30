@@ -1,0 +1,216 @@
+# Cluster-wide admission rules. System and platform namespaces are excluded:
+# those pods are not the shop, and a restart of the lab 2 monitoring stack or of
+# Kyverno itself must not be rejected by rules written for application workloads.
+# CloudNativePG's own pods are created in the shop namespace by the operator, so
+# they stay in scope. Their image is on the trusted list, and the capability
+# rule below does not demand drop: [ALL] from that image.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-resource-limits
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: cpu-and-memory
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - monitoring
+                - kyverno
+                - cnpg-system
+                - local-path-storage
+                - istio-system
+      validate:
+        message: >-
+          Every container needs cpu and memory requests and limits.
+          Without them the scheduler cannot place the pod, and saturation
+          (working set / limit) cannot be measured.
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  requests:
+                    cpu: "?*"
+                    memory: "?*"
+                  limits:
+                    cpu: "?*"
+                    memory: "?*"
+            =(initContainers):
+              - resources:
+                  requests:
+                    cpu: "?*"
+                    memory: "?*"
+                  limits:
+                    cpu: "?*"
+                    memory: "?*"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: trusted-image-registry
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: registry
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - monitoring
+                - kyverno
+                - cnpg-system
+                - local-path-storage
+                - istio-system
+      validate:
+        message: >-
+          Images must come from localhost:5001 (this cluster's registry),
+          from ghcr.io/cloudnative-pg (the database operator's own image),
+          or from docker.io/istio (the waypoint proxy, which has no shop code).
+          Anything else is an unreviewed image.
+        pattern:
+          spec:
+            containers:
+              - image: "localhost:5001/* | ghcr.io/cloudnative-pg/* | docker.io/istio/*"
+            =(initContainers):
+              - image: "localhost:5001/* | ghcr.io/cloudnative-pg/* | docker.io/istio/*"
+            =(ephemeralContainers):
+              - image: "localhost:5001/* | ghcr.io/cloudnative-pg/* | docker.io/istio/*"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-labels
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: app-and-part-of
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - monitoring
+                - kyverno
+                - cnpg-system
+                - local-path-storage
+                - istio-system
+      validate:
+        message: >-
+          Pods need labels app and app.kubernetes.io/part-of.
+          Services, monitors and alerts select on these labels;
+          a pod without them is invisible to the rest of the platform.
+        pattern:
+          metadata:
+            labels:
+              app: "?*"
+              app.kubernetes.io/part-of: "?*"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-privileged
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: privileged
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - monitoring
+                - kyverno
+                - cnpg-system
+                - local-path-storage
+                - istio-system
+      validate:
+        message: >-
+          Privileged containers are rejected. A privileged container
+          shares the node's user namespace and can leave the pod boundary.
+        pattern:
+          spec:
+            containers:
+              - =(securityContext):
+                  =(privileged): "false"
+            =(initContainers):
+              - =(securityContext):
+                  =(privileged): "false"
+            =(ephemeralContainers):
+              - =(securityContext):
+                  =(privileged): "false"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-non-root
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: non-root-and-drop-all
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - monitoring
+                - kyverno
+                - cnpg-system
+                - local-path-storage
+                - istio-system
+      validate:
+        message: >-
+          Containers must run as non-root and must drop every capability.
+          Root inside the container is one escape away from root on the node.
+          The CloudNativePG image is exempt: the operator starts it and
+          adds the capabilities postgres needs.
+        foreach:
+          - list: "request.object.spec.containers"
+            preconditions:
+              all:
+                - key: "{{ regex_match('^ghcr.io/cloudnative-pg/', element.image) }}"
+                  operator: Equals
+                  value: false
+            pattern:
+              securityContext:
+                runAsNonRoot: "true"
+                capabilities:
+                  drop:
+                    - ALL

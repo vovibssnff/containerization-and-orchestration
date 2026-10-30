@@ -1,0 +1,22 @@
+configMap:
+  enabled: true
+  rawConfig:
+    alertmanager:
+      interval: 15s
+      servers:
+        - name: lab2
+          uri: http://kube-prometheus-stack-alertmanager.monitoring.svc:9093
+          timeout: 10s
+          proxy: true
+    listen:
+      address: "0.0.0.0"
+      port: 8080
+    log:
+      level: info
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    memory: 256Mi

@@ -1,0 +1,19 @@
+krr simple, namespace shop, Prometheus http://127.0.0.1:9091
+history 2h, step 1m, cpu percentile 95, memory max + 15%, points required 2
+cpu limit is left unset by this strategy. memory request and limit are the same number.
+
+workload   cpu request   memory request   memory limit   cpu limit
+api        212m          100Mi            100Mi          (unset)
+worker     10m           100Mi            100Mi          (unset)
+batch      10m           100Mi            100Mi          (unset)
+
+10m and 100Mi are krr's floors (cpu_min_value 10, memory_min_value 100).
+api is the one the load actually moved: p95 CPU 212m against a 50m request.
+
+postgres is a CloudNativePG Cluster, not a Deployment, so krr does not scan it.
+Same formulas on container "postgres" of pod postgres-1:
+  cpu  quantile_over_time(0.95, rate over 2h) = 0.125 core -> 125m
+  memory max_over_time(working set) = 100077568 bytes
+         * 1.15 = 115089203 bytes = 110Mi
+Applied to both the postgres container and the bootstrap-controller,
+because the Cluster spec sets one resources block for both.

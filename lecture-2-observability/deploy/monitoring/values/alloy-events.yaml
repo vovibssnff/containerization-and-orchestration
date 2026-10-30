@@ -1,0 +1,31 @@
+alloy:
+  enableReporting: false
+  configMap:
+    content: |
+      loki.source.kubernetes_events "cluster" {
+        log_format = "json"
+        forward_to = [loki.write.default.receiver]
+      }
+
+      loki.write "default" {
+        endpoint {
+          url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+controller:
+  type: deployment
+  replicas: 1
+
+rbac:
+  create: true
+  rules:
+    - apiGroups: [""]
+      resources: ["events"]
+      verbs: ["get", "list", "watch"]

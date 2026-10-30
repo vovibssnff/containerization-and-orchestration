@@ -1,0 +1,31 @@
+groups:
+  - name: release-gate
+    rules:
+      # The captain asked for a verdict and the workflow did not finish.
+      # for: 5m so one bad payload does not page.
+      - alert: ReleaseGateFailing
+        expr: sum(rate(n8n_workflow_failed_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: the release gate is failing
+          description: Workflow runs have been ending in error for 5 minutes. The captain asked for a verdict and did not get one.
+      # The webhook the captain calls is itself slow. A note that arrives after the window is useless.
+      - alert: ReleaseGateSlow
+        expr: histogram_quantile(0.95, sum by (le) (rate(release_gate_duration_seconds_bucket[2m]))) > 30
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: calls to the release gate are slow
+          description: p95 of the captain's call is above 30s for 5 minutes. The verdict is arriving after the release window.
+      # The workflow is saved but not listening. A webhook then has nowhere to go.
+      - alert: ReleaseGateNotListening
+        expr: n8n_active_workflow_count == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: the release gate workflow is not active
+          description: No workflow is active. The release webhook is not registered, so a candidate is silently dropped.

@@ -1,0 +1,21 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: {{ .Values.priority.criticalName }}
+  labels:
+    app.kubernetes.io/part-of: shop
+value: {{ .Values.priority.criticalValue }}
+preemptionPolicy: PreemptLowerPriority
+globalDefault: false
+description: shop order path (api and postgres). May preempt batch.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: {{ .Values.priority.batchName }}
+  labels:
+    app.kubernetes.io/part-of: shop
+value: {{ .Values.priority.batchValue }}
+preemptionPolicy: Never
+globalDefault: false
+description: nightly analytics. Yields to the order path and must not preempt anyone.

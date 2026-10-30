@@ -1,0 +1,92 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: shop
+  labels:
+    app: api
+    app.kubernetes.io/part-of: shop
+spec:
+  groups:
+    - name: shop.symptoms
+      rules:
+        - alert: ShopApiErrorRateHigh
+          expr: |
+            (
+              sum(rate(http_requests_total{namespace="shop",job="api",code=~"5.."}[5m]))
+              /
+              sum(rate(http_requests_total{namespace="shop",job="api",route!="/health"}[5m]))
+            ) > {{ .Values.alerts.errorRatio }}
+          for: {{ .Values.alerts.for }}
+          labels:
+            severity: critical
+          annotations:
+            summary: shop api is returning errors to users
+            description: More than {{ .Values.alerts.errorRatio }} of non-probe requests have been 5xx for {{ .Values.alerts.for }}. Check the order handler and postgres, then roll back if a release caused it.
+        - alert: ShopApiLatencyP95High
+          expr: |
+            histogram_quantile(
+              0.95,
+              sum by (le) (
+                rate(http_request_duration_seconds_bucket{namespace="shop",job="api",route!="/health",code=~"2.."}[5m])
+              )
+            ) > {{ .Values.alerts.latencySeconds }}
+          for: {{ .Values.alerts.for }}
+          labels:
+            severity: critical
+          annotations:
+            summary: shop api p95 latency of successful requests is above {{ .Values.alerts.latencySeconds }}s
+            description: p95 of successful (2xx) non-probe requests is above {{ .Values.alerts.latencySeconds }}s for {{ .Values.alerts.for }}. Failures are a separate series, so fast 500s cannot hide a slow success.
+        - alert: ShopOrderPathSlow
+          expr: |
+            histogram_quantile(
+              0.95,
+              sum by (le) (
+                rate(http_request_duration_seconds_bucket{namespace="shop",job="api",route="/order",code=~"2.."}[5m])
+              )
+            ) > {{ .Values.alerts.orderLatencySeconds }}
+          for: {{ .Values.alerts.for }}
+          labels:
+            severity: critical
+          annotations:
+            summary: placing an order is slower than the SLA
+            description: p95 of successful POST /order is above {{ .Values.alerts.orderLatencySeconds }}s for {{ .Values.alerts.for }}. This is the critical path (api to postgres). Batch load is allowed to degrade; this page means the order path itself did not.
+        - alert: ShopOrdersStuck
+          expr: |
+            (max(shop_orders_unprocessed{namespace="shop",job="api"}) or vector(0)) > 0
+          for: {{ .Values.alerts.for }}
+          labels:
+            severity: critical
+          annotations:
+            summary: orders are accepted but not processed
+            description: The api has unprocessed orders for {{ .Values.alerts.for }}. The worker or postgres is not draining the table. Check the worker pods and the postgres cluster status.
+        - alert: ShopApiEndpointsGone
+          expr: |
+            (sum(kube_endpointslice_endpoints{namespace="shop",endpointslice=~"api-.*",ready="true"}) or vector(0)) == 0
+          for: {{ .Values.alerts.for }}
+          labels:
+            severity: critical
+          annotations:
+            summary: the api Service has no ready pod
+            description: EndpointSlice api has had zero ready addresses for {{ .Values.alerts.for }}. The Service name still resolves, but kube-proxy has nowhere to send a connection. This is the continuity failure from the chaos test, sustained.
+        - alert: ShopNetworkPolicyDenies
+          expr: |
+            sum(rate(hubble_drop_total{reason="POLICY_DENIED",protocol="TCP"}[5m])) > {{ .Values.alerts.dropPerSecond }}
+          for: {{ .Values.alerts.for }}
+          labels:
+            severity: critical
+          annotations:
+            summary: network policy is dropping traffic
+            description: Hubble has been dropping more than {{ .Values.alerts.dropPerSecond }} TCP flows per second for {{ .Values.alerts.for }} because of policy. A single stray probe does not sustain that rate. Check the shop flows in Hubble before opening the allow rules.
+        - alert: ShopDnsUnhealthy
+          expr: |
+            (
+              sum(rate(coredns_dns_responses_total{rcode=~"SERVFAIL|REFUSED"}[5m])) > {{ .Values.alerts.dropPerSecond }}
+            ) or (
+              min(up{job="coredns"}) == 0
+            )
+          for: {{ .Values.alerts.for }}
+          labels:
+            severity: critical
+          annotations:
+            summary: cluster DNS is failing lookups
+            description: CoreDNS is down or answering SERVFAIL/REFUSED for {{ .Values.alerts.for }}. Pods cannot resolve Service names. A NetworkPolicy that drops DNS shows up as Hubble drops, not as a CoreDNS error, because the packet never arrives.

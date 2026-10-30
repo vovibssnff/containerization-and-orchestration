@@ -1,0 +1,19 @@
+{{- if .Values.network.enabled }}
+# Cilium delivers packets to the apiserver node IP as the kube-apiserver
+# entity. A NetworkPolicy ipBlock for that IP is installed as well, and Hubble
+# still shows the SYN dropped: the entity is not selected by the ipBlock.
+# This rule is the one that matches.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: postgres-apiserver
+  labels:
+    app.kubernetes.io/part-of: shop
+spec:
+  endpointSelector:
+    matchLabels:
+      app: postgres
+  egress:
+    - toEntities:
+        - kube-apiserver
+{{- end }}

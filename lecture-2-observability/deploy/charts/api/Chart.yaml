@@ -1,0 +1,6 @@
+apiVersion: v2
+name: api
+description: HTTP api for the lab stack. Becomes the shop chart in later labs.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -1,0 +1,89 @@
+# Discover ServiceMonitor and PrometheusRule objects from every namespace
+# and every Helm release. The chart default only selects objects labelled
+# with this release, which would hide the api chart and the later shop chart.
+prometheus:
+  prometheusSpec:
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector: {}
+    podMonitorNamespaceSelector: {}
+    ruleSelectorNilUsesHelmValues: false
+    ruleSelector: {}
+    ruleNamespaceSelector: {}
+    probeSelectorNilUsesHelmValues: false
+    probeSelector: {}
+    probeNamespaceSelector: {}
+    # Required before histogram exemplars (trace_id on a sample) are stored.
+    enableFeatures:
+      - exemplar-storage
+    retention: 6h
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+
+grafana:
+  adminUser: admin
+  adminPassword: admin
+  service:
+    type: ClusterIP
+  sidecar:
+    datasources:
+      exemplarTraceIdDestinations:
+        datasourceUid: jaeger
+        traceIdLabelName: trace_id
+        urlDisplayLabel: View trace
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      access: proxy
+      uid: loki
+      url: http://loki.monitoring.svc.cluster.local:3100
+      jsonData:
+        derivedFields:
+          - datasourceUid: jaeger
+            matcherRegex: "\"trace_id\":\"(\\w+)\""
+            name: TraceID
+            url: "$${__value.raw}"
+            urlDisplayLabel: View trace
+    - name: Jaeger
+      type: jaeger
+      access: proxy
+      uid: jaeger
+      url: http://jaeger.monitoring.svc.cluster.local:16686
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        memory: 256Mi
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      # Built-in kube-prometheus rules (CPU, disk, kubelet, Watchdog) stay
+      # available for investigation. They are not a page: lecture 2 says a
+      # cause metric must not wake someone. Only the three api symptom alerts do.
+      group_by: ["alertname", "namespace"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: "null"
+      routes:
+        - matchers:
+            - alertname =~ "ApiErrorRateHigh|ApiLatencyP95High|ApiNoReadyPods|ShopApiErrorRateHigh|ShopApiLatencyP95High|ShopOrdersStuck|ShopOrderPathSlow|ShopApiEndpointsGone|ShopNetworkPolicyDenies|ShopDnsUnhealthy|ShopMeshBackendErrors|ShopMeshClientErrors|ShopWaypointDown"
+          receiver: sink
+    receivers:
+      - name: "null"
+      - name: sink
+        webhook_configs:
+          - url: http://alert-sink.monitoring.svc.cluster.local:8080/webhook
+            send_resolved: true

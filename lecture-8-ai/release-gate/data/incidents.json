@@ -1,0 +1,22 @@
+{
+  "freeze": {
+    "active": "no",
+    "reason": "заморозки нет, пятничное окно открыто"
+  },
+  "incidents": [
+    {
+      "id": "INC-184",
+      "service": "picker-app",
+      "severity": "sev3",
+      "status": "open",
+      "summary": "сборка заказа на складе дольше обычного"
+    },
+    {
+      "id": "INC-179",
+      "service": "order-api",
+      "severity": "sev1",
+      "status": "closed",
+      "summary": "вчерашний таймаут записи, закрыт утром"
+    }
+  ]
+}

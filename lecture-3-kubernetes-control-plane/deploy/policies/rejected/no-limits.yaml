@@ -1,0 +1,19 @@
+# Breaks require-resource-limits only.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: no-limits
+  namespace: policy-demo
+  labels:
+    app: no-limits
+    app.kubernetes.io/part-of: shop
+spec:
+  containers:
+    - name: app
+      image: localhost:5001/shop-api:0.1.0
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]

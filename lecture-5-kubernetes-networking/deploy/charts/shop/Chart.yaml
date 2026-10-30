@@ -1,0 +1,6 @@
+apiVersion: v2
+name: shop
+description: shop critical path, worker, batch analytics, CloudNativePG postgres, and zero-trust NetworkPolicy
+type: application
+version: 0.3.0
+appVersion: "0.3.0"

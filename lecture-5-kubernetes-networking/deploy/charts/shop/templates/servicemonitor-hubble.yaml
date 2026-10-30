@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: hubble
+  labels:
+    app: api
+    app.kubernetes.io/part-of: shop
+spec:
+  namespaceSelector:
+    matchNames:
+      - kube-system
+  selector:
+    matchLabels:
+      k8s-app: hubble
+      app.kubernetes.io/name: hubble
+  endpoints:
+    - port: hubble-metrics
+      interval: 30s

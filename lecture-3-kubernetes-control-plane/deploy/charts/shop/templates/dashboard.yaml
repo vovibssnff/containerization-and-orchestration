@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shop-red
+  labels:
+    grafana_dashboard: "1"
+data:
+  shop-red.json: |
+    {
+      "uid": "shop-red",
+      "title": "shop golden signals",
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "refresh": "10s",
+      "time": {"from": "now-15m", "to": "now"},
+      "panels": [
+        {
+          "id": 1,
+          "type": "timeseries",
+          "title": "Request rate",
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (route, code) (rate(http_requests_total{namespace=\"shop\",job=\"api\"}[5m]))",
+              "legendFormat": "{{ "{{route}}" }} {{ "{{code}}" }}"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "timeseries",
+          "title": "Error ratio (5xx, probes excluded)",
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(http_requests_total{namespace=\"shop\",job=\"api\",code=~\"5..\"}[5m])) / sum(rate(http_requests_total{namespace=\"shop\",job=\"api\",route!=\"/health\"}[5m]))",
+              "legendFormat": "error ratio"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "type": "timeseries",
+          "title": "p95 latency, success and failure separately",
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket{namespace=\"shop\",job=\"api\",code=~\"2..\"}[5m])))",
+              "legendFormat": "2xx {{ "{{route}}" }}"
+            },
+            {
+              "refId": "B",
+              "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket{namespace=\"shop\",job=\"api\",code=~\"5..\"}[5m])))",
+              "legendFormat": "5xx {{ "{{route}}" }}"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "timeseries",
+          "title": "Unprocessed orders",
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max(shop_orders_unprocessed{namespace=\"shop\",job=\"api\"})",
+              "legendFormat": "unprocessed"
+            }
+          ]
+        }
+      ]
+    }

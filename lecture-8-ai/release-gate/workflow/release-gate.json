@@ -1,0 +1,292 @@
+{
+  "createdAt": "2026-10-30T19:52:08.053Z",
+  "updatedAt": "2026-10-30T20:32:33.000Z",
+  "id": "V7fO3C79dIcOqxrA",
+  "name": "release-gate",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "release-gate",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "validate",
+      "name": "Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $json.body ?? $json;\nif (!body.version || !body.service) {\n  throw new Error('version and service are required');\n}\nreturn [{ json: { version: String(body.version), service: String(body.service) } }];"
+      }
+    },
+    {
+      "id": "ci-status",
+      "name": "CI status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=http://ci-mock:8080/status?service={{ $json.service }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "build-prompt",
+      "name": "Build prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const req = $('Validate').first().json;\nconst ci = $json;\nconst prompt = [\n  `Service: ${req.service}`,\n  `Version: ${req.version}`,\n  `CI status: ${JSON.stringify(ci)}`,\n  'Follow the skill. Write the verdict file. Then stop.',\n].join('\\n');\nreturn [{ json: { prompt, version: req.version, service: req.service } }];"
+      }
+    },
+    {
+      "id": "release-agent",
+      "name": "Release agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        300
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "options": {
+          "systemMessage": "# Skill: release gate\n\nYou are the release captain's assistant at Severnaya Polka. You decide whether\nthe service in the user message may ship. Copy facts from tool results. Do not\ninvent ids, commits, or sentences.\n\n## Order\n\nCall one tool, then wait. Do not call `write_verdict` until the five reads below\nhave happened, in this order:\n\n1. `list_release_files` with `repo` = `release`.\n2. `read_release_file` with `name` = `CHANGELOG.md`.\n3. `read_release_file` with `name` = `FREEZE.md`.\n4. `list_open_incidents` with `service` from the user message.\n5. `release_freeze` with `board` = `oncall`.\n6. `write_verdict` with `version` from the user message and `markdown` below.\n7. Stop.\n\n## Rules\n\nThe first line is `GO` and the version. Write `NO-GO` instead only if one of these is true.\nNever write both words. Step 6 is the `write_verdict` tool. A plain-text note is not saved.\n\n- `release_freeze` says `active=yes`, or `FREEZE.md` says `active: yes`\n- an open incident for this service is `sev1` or `sev2`\n- the CI pipeline is not `green`\n- the changelog for this version says a migration will run (`migration`, `миграция схемы`). `схема не меняется` means there is no migration, so it does not block\n\nOtherwise the first line is `GO`. An open incident for another service does not\nblock. A closed incident does not block.\n\n## The note\n\nRussian markdown. Four lines, nothing else:\n\n```\nGO <version>\nchangelog: <the changelog sentence, copied>\nCI: <pipeline, tests, commit>\nincidents: <each open incident id, and why it does or does not block>\n```\n\nUse `NO-GO` instead of `GO` on the first line when a rule above fails. Keep the\nother three lines.\n",
+          "maxIterations": 16,
+          "returnIntermediateSteps": true
+        }
+      }
+    },
+    {
+      "id": "ollama",
+      "name": "Ollama",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        980,
+        520
+      ],
+      "parameters": {
+        "model": "qwen2.5:3b",
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "credentials": {
+        "ollamaApi": {
+          "id": "Mn1DlqgeZCmAMFzV",
+          "name": "Local Ollama"
+        }
+      }
+    },
+    {
+      "id": "files-mcp",
+      "name": "Files MCP",
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1.2,
+      "position": [
+        1160,
+        520
+      ],
+      "parameters": {
+        "endpointUrl": "http://files-mcp:8000/sse",
+        "serverTransport": "sse",
+        "authentication": "none",
+        "include": "all"
+      }
+    },
+    {
+      "id": "incidents-mcp",
+      "name": "Incidents MCP",
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1.2,
+      "position": [
+        1340,
+        520
+      ],
+      "parameters": {
+        "endpointUrl": "http://incidents-mcp:8000/sse",
+        "serverTransport": "sse",
+        "authentication": "none",
+        "include": "all"
+      }
+    },
+    {
+      "id": "read-verdict",
+      "name": "Read verdict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const fs = require('fs');\nconst version = $('Build prompt').first().json.version;\nconst path = `/data/out/release-${version}.md`;\nif (!fs.existsSync(path)) {\n  throw new Error('verdict file was not written');\n}\nreturn [{ json: { path, text: fs.readFileSync(path, 'utf8') } }];"
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1560,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate": {
+      "main": [
+        [
+          {
+            "node": "CI status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CI status": {
+      "main": [
+        [
+          {
+            "node": "Build prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build prompt": {
+      "main": [
+        [
+          {
+            "node": "Release agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release agent": {
+      "main": [
+        [
+          {
+            "node": "Read verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read verdict": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Release agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Files MCP": {
+      "ai_tool": [
+        [
+          {
+            "node": "Release agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Incidents MCP": {
+      "ai_tool": [
+        [
+          {
+            "node": "Release agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": null,
+  "versionId": "c87b974d-a103-477b-ae5a-703be5a0c8af",
+  "triggerCount": 1,
+  "parentFolder": null,
+  "scopes": [
+    "workflow:create",
+    "workflow:delete",
+    "workflow:execute",
+    "workflow:list",
+    "workflow:move",
+    "workflow:read",
+    "workflow:share",
+    "workflow:update"
+  ]
+}

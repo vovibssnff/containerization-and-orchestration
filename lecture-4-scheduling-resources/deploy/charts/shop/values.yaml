@@ -1,0 +1,103 @@
+# How api replicas are spread. podAntiAffinity is a hard "never share a node".
+# topologySpreadConstraints keeps the count balanced and, on a 2-node cluster,
+# still places all 3 replicas (2 + 1). See the report for why this one is used.
+scheduling:
+  mechanism: topologySpreadConstraints
+  maxSkew: 1
+
+priority:
+  criticalName: shop-critical
+  criticalValue: 1000000
+  batchName: shop-batch
+  batchValue: -100
+
+api:
+  replicaCount: 3
+  image:
+    repository: localhost:5001/shop-api
+    tag: "0.1.2"
+    pullPolicy: IfNotPresent
+  healthFail: false
+  # Original guess, before krr: 50m/64Mi request, 500m/256Mi limit.
+  priorityClass: shop-critical
+  pdb:
+    minAvailable: 2
+  # The control-plane taint stays. Only api tolerates it, so the two nodes of
+  # this cluster are both feasible for the order path and batch cannot land there.
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+  resources:
+    requests:
+      cpu: 212m
+      memory: 100Mi
+    limits:
+      cpu: 212m
+      memory: 100Mi
+
+worker:
+  replicaCount: 2
+  image:
+    repository: localhost:5001/shop-worker
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  priorityClass: ""
+  resources:
+    requests:
+      cpu: 10m
+      memory: 100Mi
+    limits:
+      cpu: 10m
+      memory: 100Mi
+
+batch:
+  replicaCount: 1
+  image:
+    repository: localhost:5001/shop-batch
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  memoryMB: 32
+  burnCPU: false
+  priorityClass: shop-batch
+  # Burstable on purpose: the request is what the scheduler reserves, the limit
+  # is the cgroup ceiling, and they are far apart. krr's idle reading (10m/100Mi)
+  # is not used here, because this pod is the one we scale and inflate.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+service:
+  port: 8080
+
+database:
+  secret: postgres-app
+  key: uri
+
+postgres:
+  instances: 1
+  image: ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie
+  storage: 1Gi
+  priorityClass: shop-critical
+  pdb:
+    minAvailable: 1
+  resources:
+    requests:
+      cpu: 125m
+      memory: 110Mi
+    limits:
+      cpu: 125m
+      memory: 110Mi
+
+otel:
+  endpoint: http://jaeger.monitoring.svc.cluster.local:4318
+
+alerts:
+  errorRatio: 0.05
+  latencySeconds: 2
+  orderLatencySeconds: 0.3
+  for: 5m
